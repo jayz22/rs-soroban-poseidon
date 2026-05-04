@@ -229,6 +229,16 @@ where
     /// [noir's Poseidon2
     /// implementation](https://github.com/noir-lang/noir/blob/master/noir_stdlib/src/hash/poseidon2.nr).
     ///
+    /// # Empty Inputs
+    ///
+    /// Empty input is permitted. With `inputs.is_empty()`, the IV is `0`, no
+    /// inputs are absorbed, and the result is the Poseidon2 permutation of
+    /// the all-zero state — a fixed constant for each `(T, F)`. Domain
+    /// separation from non-empty inputs is preserved by the length-encoded
+    /// IV: `hash([])` ≠ `hash([0])`. (V1 [`PoseidonSponge::compute_hash`]
+    /// rejects empty input — V1 requires `inputs.len() == RATE` and only
+    /// supports `T ≥ 2`, so the minimum input length is 1.)
+    ///
     /// # Panics
     /// - if `inputs.len() > RATE` (i.e., `T - 1`). For larger inputs,
     ///   multi-round absorption would be needed (not yet implemented).

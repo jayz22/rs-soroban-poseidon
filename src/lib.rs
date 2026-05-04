@@ -165,6 +165,18 @@ where
 /// The capacity element is initialized to `inputs.len() << 64`, matching noir's
 /// Poseidon2 implementation.
 ///
+/// # Empty Inputs
+///
+/// Empty input is permitted. With `inputs.is_empty()`, the IV is `0`, no
+/// inputs are absorbed, and the result is the Poseidon2 permutation of the
+/// all-zero state — a fixed constant for each `(T, F)`. Domain separation
+/// from non-empty inputs is preserved by the length-encoded IV:
+/// `hash([])` ≠ `hash([0])`.
+///
+/// Note: V1 [`poseidon_hash`] does *not* accept empty input: V1 only supports
+/// `T ∈ {2..=6}` (rate ≥ 1), and `inputs.len()` must equal `RATE`, so the
+/// minimum input length is 1.
+///
 /// # Example
 ///
 /// ```
