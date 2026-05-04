@@ -131,14 +131,20 @@ impl<const T: u32, F: Field> Poseidon2Sponge<T, F>
 where
     Self: Poseidon2Config<T, F>,
 {
+    /// Resets the sponge state with the supplied capacity IV.
+    ///
+    /// Layout (length `T = RATE + 1`):
+    /// - `state[0..=RATE-1]`: rate cells, initialized to `0`. Filled by
+    ///   [`absorb`](Self::absorb).
+    /// - `state[T-1]`: capacity cell, initialized to `iv`.
+    ///
+    /// [`compute_hash`](Self::compute_hash) uses
+    /// `iv = (inputs.len() as u128) << 64`.
     fn reset_state(&mut self, iv: U256) {
-        // State layout: [rate elements...][capacity element]
-        // Rate elements are at positions 0..RATE, capacity (IV) is at position T-1 (last)
         self.state = vec![&self.env];
         for _ in 0..Self::RATE {
             self.state.push_back(U256::from_u32(&self.env, 0));
         }
-        // IV goes at the last position (capacity element)
         self.state.push_back(iv);
     }
 
@@ -173,10 +179,23 @@ where
         );
     }
 
+    /// Absorbs `inputs` into the rate portion of the state.
+    ///
+    /// Writes `inputs[i]` into `state[i]` for `i` in `0..=inputs.len()-1`,
+    /// overwriting only those rate cells; remaining rate cells (if any) keep
+    /// their reset value of `0`, and the capacity cell `state[T-1]` is not
+    /// touched.
+    ///
+    /// Single-block only: hashing more than `RATE` inputs is not yet
+    /// supported and panics.
+    ///
+    /// # Panics
+    /// - if `inputs.len() > RATE`.
+    /// - if any `inputs[i] >= field modulus`.
     pub(crate) fn absorb(&mut self, inputs: &Vec<U256>) {
-        // <= is safe here because IV = input_len << 64 provides domain
-        // separation for different-length inputs. This differs from Poseidon V1
-        // (which uses IV=0 and therefore requires == RATE).
+        // `inputs.len() <= RATE` is permitted because the length-encoded IV in
+        // the capacity cell separates inputs of different lengths (unlike V1,
+        // which uses a zero IV and therefore requires `== RATE`).
         assert!(
             inputs.len() <= Self::RATE,
             "Poseidon2: inputs.len() must not exceed rate (T - 1)"
@@ -189,9 +208,12 @@ where
         }
     }
 
+    /// Permutes the full state and returns the output cell.
+    ///
+    /// Applies the Poseidon2 permutation, then returns `state[0]` — the first
+    /// rate cell.
     pub(crate) fn squeeze(&mut self) -> U256 {
         self.perform_duplex();
-        // Output is at position 0
         self.state.get_unchecked(0)
     }
 

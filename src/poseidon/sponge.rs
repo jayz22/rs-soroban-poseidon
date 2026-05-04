@@ -176,9 +176,14 @@ impl<const T: u32, F: Field> PoseidonSponge<T, F>
 where
     Self: PoseidonConfig<T, F>,
 {
+    /// Resets the sponge state to all zeros.
+    ///
+    /// Layout (length `T = RATE + 1`):
+    /// - `state[0]`: capacity cell, initialized to `0`. This is also the
+    ///   output cell read by [`squeeze`](Self::squeeze).
+    /// - `state[1..=T-1]`: rate cells, initialized to `0`. Filled by
+    ///   [`absorb`](Self::absorb).
     fn reset_state(&mut self) {
-        // initialize the state with CAPACITY elements (CAPACITY = 1 in our sponge) at the 0-th element
-        // The initial value is 0 for standard Poseidon
         let iv = U256::from_u32(&self.env, 0);
         self.state = vec![&self.env, iv];
         for _ in 0..Self::RATE {
@@ -216,6 +221,15 @@ where
         );
     }
 
+    /// Absorbs `inputs` into the rate portion of the state.
+    ///
+    /// Writes `inputs[i]` into `state[i + 1]`, overwriting the rate cells
+    /// (indices `1..=T-1`). The capacity cell `state[0]` is not touched.
+    ///
+    /// # Panics
+    /// - if `inputs.len() != RATE` (must exactly fill the rate; prevents
+    ///   suffix-zero collisions).
+    /// - if any `inputs[i] >= field modulus`.
     pub(crate) fn absorb(&mut self, inputs: &Vec<U256>) {
         assert!(
             inputs.len() == Self::RATE,
@@ -229,6 +243,10 @@ where
         }
     }
 
+    /// Permutes the full state and returns the output cell.
+    ///
+    /// Applies the Poseidon permutation to `state[0..=T-1]`, then returns
+    /// `state[0]` — the capacity cell.
     pub(crate) fn squeeze(&mut self) -> U256 {
         self.perform_duplex();
         self.state.get_unchecked(0)
