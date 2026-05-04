@@ -260,8 +260,12 @@ where
     /// sponge (vs creating a new one) is reusing the pre-initialized
     /// parameters.
     ///
-    /// This matches [circom's Poseidon
+    /// The sponge construction matches circom's [Poseidon
     /// implementation](https://github.com/iden3/circomlib/blob/master/circuits/poseidon.circom).
+    /// Parameters are field-specific: BN254 matches circomlib; BLS12-381 is
+    /// self-generated to match
+    /// [poseidon-bls12381-circom](https://github.com/jmagan/poseidon-bls12381-circom)
+    /// (circomlib does not ship BLS12-381 parameters).
     ///
     /// # Panics
     /// - if `inputs.len() != RATE` (i.e., must equal `T - 1` exactly).

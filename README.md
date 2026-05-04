@@ -4,7 +4,7 @@ Poseidon and Poseidon2 cryptographic hash functions for Soroban smart contracts.
 
 ## Features
 
-- **Poseidon**: Matches [circom's implementation](https://github.com/iden3/circomlib/blob/master/circuits/poseidon.circom)
+- **Poseidon**: Sponge construction matches [circom's implementation](https://github.com/iden3/circomlib/blob/master/circuits/poseidon.circom). Parameters: BN254 matches circomlib; BLS12-381 is self-generated, matching [poseidon-bls12381-circom](https://github.com/jmagan/poseidon-bls12381-circom) (circomlib does not ship BLS12-381 parameters)
 - **Poseidon2**: Matches [noir's implementation](https://github.com/noir-lang/noir/blob/master/noir_stdlib/src/hash/poseidon2.nr)
 - Support for BN254 and BLS12-381 fields
 

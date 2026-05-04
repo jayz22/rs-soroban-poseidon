@@ -57,13 +57,20 @@ impl Field for Bls12381Fr {
     }
 }
 
-/// Computes a Poseidon hash matching circom's
-/// [implementation](https://github.com/iden3/circomlib/blob/master/circuits/poseidon.circom).
+/// Computes a Poseidon hash. The sponge construction matches circom's [Poseidon
+/// implementation](https://github.com/iden3/circomlib/blob/master/circuits/poseidon.circom),
+///
+/// Parameters (round constants, MDS matrix, round counts) are field-specific:
+/// - BN254: matches circomlib.
+/// - BLS12-381: self-generated, matching
+///   [poseidon-bls12381-circom](https://github.com/jmagan/poseidon-bls12381-circom).
+///   Circomlib does not ship BLS12-381 parameters.
 ///
 /// # Type Parameters
 ///
 /// - `T`: State size. Must equal `inputs.len() + 1` (rate = T-1, capacity = 1).
-/// - `F`: Field type. Use [`Bn254Fr`] for BN254 or [`Bls12381Fr`] for BLS12-381.
+/// - `F`: Field type. Use [`Bn254Fr`] for BN254 or [`Bls12381Fr`] for
+///   BLS12-381.
 ///
 /// # Supported Configurations
 ///
@@ -73,7 +80,8 @@ impl Field for Bls12381Fr {
 /// # Panics
 ///
 /// - if `inputs.len() != T - 1`
-/// - if any input value ≥ the field modulus (inputs must be valid field elements)
+/// - if any input value ≥ the field modulus (inputs must be valid field
+///   elements)
 ///
 /// # Example
 ///
