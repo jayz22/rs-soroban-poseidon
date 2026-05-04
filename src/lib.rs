@@ -107,12 +107,18 @@ impl Field for Bls12381Fr {
 /// assert_eq!(hash, expected);
 /// ```
 ///
-/// # Repeated Hashing
+/// # Performance
 ///
-/// For repeated hashing, create a [`PoseidonSponge`] once and call
-/// `compute_hash()` multiple times. This reuses the pre-initialized parameters
-/// (MDS matrix and round constants), but each hash computation is independent,
-/// i.e. the sponge state is reset between calls:
+/// **WARNING**: each call to `poseidon_hash` constructs a new sponge and
+/// rebuilds the full Poseidon parameter tables (MDS matrix and round
+/// constants) as host objects. The permutation remains the dominant cost,
+/// however, this per-call setup is avoidable overhead that adds up across
+/// many hashes.
+///
+/// For repeated hashing — e.g. hashing leaves of a Merkle tree — construct
+/// a [`PoseidonSponge`] **once** outside the loop and call `compute_hash()`
+/// per item. The sponge state is reset between calls, so each hash is
+/// independent:
 ///
 /// ```
 /// # use soroban_sdk::{crypto::bn254::Bn254Fr, vec, Env, U256};
@@ -177,12 +183,18 @@ where
 /// let hash = poseidon2_hash::<4, Bn254Fr>(&env, &inputs);
 /// ```
 ///
-/// # Repeated Hashing
+/// # Performance
 ///
-/// For repeated hashing, create a [`Poseidon2Sponge`] once and call
-/// `compute_hash()` multiple times. This reuses the pre-initialized parameters
-/// (diagonal matrix and round constants), but each hash computation is
-/// independent, i.e. the sponge state is reset between calls:
+/// **WARNING**: each call to `poseidon2_hash` constructs a new sponge and
+/// rebuilds the full Poseidon2 parameter tables (diagonal matrix and round
+/// constants) as host objects. The permutation remains the dominant cost,
+/// however, this per-call setup is avoidable overhead that adds up across
+/// many hashes.
+///
+/// For repeated hashing — e.g. hashing leaves of a Merkle tree — construct
+/// a [`Poseidon2Sponge`] **once** outside the loop and call `compute_hash()`
+/// per item. The sponge state is reset between calls, so each hash is
+/// independent:
 ///
 /// ```
 /// # use soroban_sdk::{crypto::bn254::Bn254Fr, vec, Env, U256};
