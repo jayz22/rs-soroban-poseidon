@@ -15,10 +15,16 @@ mod tests;
 pub use poseidon::{PoseidonConfig, PoseidonSponge};
 pub use poseidon2::{Poseidon2Config, Poseidon2Sponge};
 
-pub trait Field {
+/// A scalar field whose elements support addition (via [`core::ops::Add`])
+/// and round-tripping through `U256`.
+pub trait Field: core::ops::Add<Output = Self> + Sized {
     fn symbol() -> Symbol;
     /// Returns the field modulus. Inputs to Poseidon/Poseidon2 must be less than this value.
     fn modulus(env: &Env) -> U256;
+    /// Constructs a field element from its canonical `U256` representation.
+    fn from_u256(v: U256) -> Self;
+    /// Returns the canonical `U256` representation of a field element.
+    fn to_u256(self) -> U256;
 }
 
 impl Field for Bn254Fr {
@@ -37,6 +43,14 @@ impl Field for Bn254Fr {
             .into(),
         )
     }
+
+    fn from_u256(v: U256) -> Self {
+        Bn254Fr::from_u256(v)
+    }
+
+    fn to_u256(self) -> U256 {
+        Bn254Fr::to_u256(&self)
+    }
 }
 
 impl Field for Bls12381Fr {
@@ -54,6 +68,14 @@ impl Field for Bls12381Fr {
             )
             .into(),
         )
+    }
+
+    fn from_u256(v: U256) -> Self {
+        Bls12381Fr::from_u256(v)
+    }
+
+    fn to_u256(self) -> U256 {
+        Bls12381Fr::to_u256(&self)
     }
 }
 
@@ -140,13 +162,14 @@ where
     sponge.compute_hash(inputs)
 }
 
-/// Computes a Poseidon2 hash matching noir's
-/// [implementation](https://github.com/noir-lang/noir/blob/master/noir_stdlib/src/hash/poseidon2.nr).
+/// Computes a Poseidon2 hash matching
+/// [`noir-lang/poseidon`](https://github.com/noir-lang/poseidon/blob/main/src/poseidon2.nr)'s
+/// Poseidon2 implementation.
 ///
 /// # Type Parameters
 ///
-/// - `T`: State size. Must be ≥ `inputs.len() + 1`. Common usage is `T=4`
-///   (rate=3) matching noir's default.
+/// - `T`: State size. Common usage is `T=4` (rate=3) matching noir's default.
+///   Inputs longer than the rate are absorbed over multiple rounds.
 /// - `F`: Field type. Use [`Bn254Fr`] for BN254 or [`Bls12381Fr`] for
 ///   BLS12-381.
 ///
@@ -157,8 +180,8 @@ where
 ///
 /// # Panics
 ///
-/// - if `inputs.len() > T - 1` (rate exceeded)
-/// - if any input value ≥ the field modulus (inputs must be valid field elements)
+/// - if any input value ≥ the field modulus (inputs must be valid field
+///   elements)
 ///
 /// # Capacity Initialization
 ///
@@ -167,11 +190,10 @@ where
 ///
 /// # Empty Inputs
 ///
-/// Empty input is permitted. With `inputs.is_empty()`, the IV is `0`, no
-/// inputs are absorbed, and the result is the Poseidon2 permutation of the
-/// all-zero state — a fixed constant for each `(T, F)`. Domain separation
-/// from non-empty inputs is preserved by the length-encoded IV:
-/// `hash([])` ≠ `hash([0])`.
+/// Empty input is permitted. With `inputs.is_empty()`, the IV is `0`, no inputs
+/// are absorbed, and the result is the Poseidon2 permutation of the all-zero
+/// state — a fixed constant for each `(T, F)`. Domain separation from non-empty
+/// inputs is preserved by the length-encoded IV: `hash([])` ≠ `hash([0])`.
 ///
 /// Note: V1 [`poseidon_hash`] does *not* accept empty input: V1 only supports
 /// `T ∈ {2..=6}` (rate ≥ 1), and `inputs.len()` must equal `RATE`, so the
@@ -185,12 +207,13 @@ where
 ///
 /// let env = Env::default();
 ///
-/// // Hash three field elements (t=4, rate=3)
+/// // Hash four field elements with multi-round absorption (t=4, rate=3)
 /// let inputs = vec![
 ///     &env,
 ///     U256::from_u32(&env, 1),
 ///     U256::from_u32(&env, 2),
 ///     U256::from_u32(&env, 3),
+///     U256::from_u32(&env, 4),
 /// ];
 /// let hash = poseidon2_hash::<4, Bn254Fr>(&env, &inputs);
 /// ```
@@ -200,13 +223,12 @@ where
 /// **WARNING**: each call to `poseidon2_hash` constructs a new sponge and
 /// rebuilds the full Poseidon2 parameter tables (diagonal matrix and round
 /// constants) as host objects. The permutation remains the dominant cost,
-/// however, this per-call setup is avoidable overhead that adds up across
-/// many hashes.
+/// however, this per-call setup is avoidable overhead that adds up across many
+/// hashes.
 ///
-/// For repeated hashing — e.g. hashing leaves of a Merkle tree — construct
-/// a [`Poseidon2Sponge`] **once** outside the loop and call `compute_hash()`
-/// per item. The sponge state is reset between calls, so each hash is
-/// independent:
+/// For repeated hashing — e.g. hashing leaves of a Merkle tree — construct a
+/// [`Poseidon2Sponge`] **once** outside the loop and call `compute_hash()` per
+/// item. The sponge state is reset between calls, so each hash is independent:
 ///
 /// ```
 /// # use soroban_sdk::{crypto::bn254::Bn254Fr, vec, Env, U256};

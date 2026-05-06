@@ -34,8 +34,8 @@ pub(crate) struct Poseidon2Params {
 
 /// A Poseidon2 sponge configured for a specific state size `T` and field `F`.
 ///
-/// This is a single-absorb, single-squeeze sponge. The primary benefit of
-/// creating a sponge instance is to reuse the pre-computed parameters (MDS
+/// This is a multi-round absorb, single-squeeze sponge. The primary benefit
+/// of creating a sponge instance is to reuse the pre-computed parameters (MDS
 /// matrix diagonal and round constants) across multiple independent hash
 /// computations, avoiding repeated parameter initialization.
 ///
@@ -179,32 +179,25 @@ where
         );
     }
 
-    /// Absorbs `inputs` into the rate portion of the state.
+    /// Absorbs `inputs` into the rate portion of the state in rate-sized
+    /// chunks.
     ///
-    /// Writes `inputs[i]` into `state[i]` for `i` in `0..=inputs.len()-1`,
-    /// overwriting only those rate cells; remaining rate cells (if any) keep
-    /// their reset value of `0`, and the capacity cell `state[T-1]` is not
-    /// touched.
-    ///
-    /// Single-block only: hashing more than `RATE` inputs is not yet
-    /// supported and panics.
-    ///
-    /// # Panics
-    /// - if `inputs.len() > RATE`.
-    /// - if any `inputs[i] >= field modulus`.
+    /// Each input is added into the next rate cell (`state[0..=RATE-1]`). When
+    /// a block fills the rate, the state is permuted before absorbing the next
+    /// block. Unused cells in the final block are left unchanged, which is the
+    /// sponge's zero-padding behavior for the initial block, and the capacity
+    /// cell `state[T-1]` is not touched during absorption.
     pub(crate) fn absorb(&mut self, inputs: &Vec<U256>) {
-        // `inputs.len() <= RATE` is permitted because the length-encoded IV in
-        // the capacity cell separates inputs of different lengths (unlike V1,
-        // which uses a zero IV and therefore requires `== RATE`).
-        assert!(
-            inputs.len() <= Self::RATE,
-            "Poseidon2: inputs.len() must not exceed rate (T - 1)"
-        );
-        let modulus = F::modulus(&self.env);
+        let mut idx = 0;
         for i in 0..inputs.len() {
-            let v = inputs.get_unchecked(i);
-            assert!(v < modulus, "input exceeds field modulus");
-            self.state.set(i, v);
+            if idx == Self::RATE {
+                self.perform_duplex();
+                idx = 0;
+            }
+            let v = F::from_u256(inputs.get_unchecked(i));
+            let state_element = F::from_u256(self.state.get_unchecked(idx));
+            self.state.set(idx, (state_element + v).to_u256());
+            idx += 1;
         }
     }
 
@@ -226,8 +219,8 @@ where
     /// parameters.
     ///
     /// The capacity element is initialized to `input.len() << 64`, matching
-    /// [noir's Poseidon2
-    /// implementation](https://github.com/noir-lang/noir/blob/master/noir_stdlib/src/hash/poseidon2.nr).
+    /// [`noir-lang/poseidon`](https://github.com/noir-lang/poseidon/blob/main/src/poseidon2.nr)'s
+    /// Poseidon2 implementation.
     ///
     /// # Empty Inputs
     ///
@@ -240,11 +233,19 @@ where
     /// supports `T ≥ 2`, so the minimum input length is 1.)
     ///
     /// # Panics
-    /// - if `inputs.len() > RATE` (i.e., `T - 1`). For larger inputs,
-    ///   multi-round absorption would be needed (not yet implemented).
     /// - if any input value is greater than or equal to the field modulus.
     ///   All inputs must be valid field elements (i.e., less than the modulus).
     pub fn compute_hash(&mut self, inputs: &Vec<U256>) -> U256 {
+        let modulus = F::modulus(&self.env);
+        // Reject non-canonical inputs: `F::from_u256` silently reduces values
+        // ≥ modulus inside `absorb`, so without this check `hash([v])` would
+        // collide with `hash([v + r])` for any `v` such that `v + r` fits in
+        // U256. The check is required for collision resistance.
+        assert!(
+            inputs.iter().all(|v| v < modulus),
+            "input exceeds field modulus"
+        );
+
         // The initial value for the capacity element: input.len() * 2^64 for Poseidon2
         let iv = U256::from_u128(&self.env, (inputs.len() as u128) << 64);
         self.reset_state(iv);
