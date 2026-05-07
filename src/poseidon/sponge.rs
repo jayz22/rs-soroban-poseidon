@@ -208,7 +208,7 @@ where
         inner
     }
 
-    pub(crate) fn perform_duplex(&mut self) {
+    fn perform_duplex(&mut self) {
         self.state = self.env.crypto_hazmat().poseidon_permutation(
             &self.state,
             F::symbol(),
@@ -229,16 +229,13 @@ where
     /// # Panics
     /// - if `inputs.len() != RATE` (must exactly fill the rate; prevents
     ///   suffix-zero collisions).
-    /// - if any `inputs[i] >= field modulus`.
-    pub(crate) fn absorb(&mut self, inputs: &Vec<U256>) {
+    fn absorb(&mut self, inputs: &Vec<U256>) {
         assert!(
             inputs.len() == Self::RATE,
             "Poseidon: inputs.len() must equal rate (T - 1)"
         );
-        let modulus = F::modulus(&self.env);
         for i in 0..inputs.len() {
             let v = inputs.get_unchecked(i);
-            assert!(v < modulus, "input exceeds field modulus");
             self.state.set(i + CAPACITY, v);
         }
     }
@@ -247,7 +244,7 @@ where
     ///
     /// Applies the Poseidon permutation to `state[0..=T-1]`, then returns
     /// `state[0]` — the capacity cell.
-    pub(crate) fn squeeze(&mut self) -> U256 {
+    fn squeeze(&mut self) -> U256 {
         self.perform_duplex();
         self.state.get_unchecked(0)
     }
@@ -275,6 +272,16 @@ where
     /// - if any input value is greater than or equal to the field modulus.
     ///   All inputs must be valid field elements (i.e., less than the modulus).
     pub fn compute_hash(&mut self, inputs: &Vec<U256>) -> U256 {
+        let modulus = F::modulus(&self.env);
+        // Reject non-canonical inputs: `U256` values ≥ modulus would otherwise
+        // be silently reduced inside the underlying field operations, so
+        // without this check `hash([v])` would collide with `hash([v + r])`
+        // for any `v` such that `v + r` fits in U256. The check is required
+        // for collision resistance.
+        assert!(
+            inputs.iter().all(|v| v < modulus),
+            "input exceeds field modulus"
+        );
         self.reset_state();
         self.absorb(inputs);
         self.squeeze()

@@ -166,7 +166,7 @@ where
         inner
     }
 
-    pub(crate) fn perform_duplex(&mut self) {
+    fn perform_duplex(&mut self) {
         self.state = self.env.crypto_hazmat().poseidon2_permutation(
             &self.state,
             F::symbol(),
@@ -187,7 +187,7 @@ where
     /// block. Unused cells in the final block are left unchanged, which is the
     /// sponge's zero-padding behavior for the initial block, and the capacity
     /// cell `state[T-1]` is not touched during absorption.
-    pub(crate) fn absorb(&mut self, inputs: &Vec<U256>) {
+    fn absorb(&mut self, inputs: &Vec<U256>) {
         let mut idx = 0;
         for i in 0..inputs.len() {
             if idx == Self::RATE {
@@ -205,7 +205,7 @@ where
     ///
     /// Applies the Poseidon2 permutation, then returns `state[0]` — the first
     /// rate cell.
-    pub(crate) fn squeeze(&mut self) -> U256 {
+    fn squeeze(&mut self) -> U256 {
         self.perform_duplex();
         self.state.get_unchecked(0)
     }
